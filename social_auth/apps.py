@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class IncomeConfig(AppConfig):
+class SocialAuthConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'income'
+    name = 'social_auth'

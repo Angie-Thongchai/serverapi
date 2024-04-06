@@ -16,9 +16,11 @@ class Expense(models.Model):
     description = models.TextField()
     owner = models.ForeignKey(to=User, on_delete=models.CASCADE)
     date = models.DateField(null=False, blank=False)
+    create_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-       ordering: ['-dated']
+       ordering: ['-update_at']
 
     def __str__(self):
         return str(self.owner)+'s income'

@@ -1,6 +1,6 @@
 from django.shortcuts import render
-from rest_framework import generics, status, views, serializers
-from .serializers import RegisterSerializer, SetNewPasswordSerializer, EmailVerificationSerializer, LoginSerializer, ResetPasswordEmailRequestSerializer
+from rest_framework import generics, status, views, permissions
+from .serializers import RegisterSerializer, LogoutSerialzer, SetNewPasswordSerializer, EmailVerificationSerializer, LoginSerializer, ResetPasswordEmailRequestSerializer
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
@@ -18,8 +18,13 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.contrib.sites.shortcuts import get_current_site
 from django.urls import reverse
 from .utils import Util
+from django.shortcuts import redirect
+from django.http import HttpResponsePermanentRedirect
+import os
 
+class CustomRedirect(HttpResponsePermanentRedirect):
 
+    allowed_schemes = [os.environ.get('APP_SCHEME'), 'http', 'https']
 
 class RegisterView(generics.GenericAPIView):
 
@@ -33,9 +38,7 @@ class RegisterView(generics.GenericAPIView):
         serializer.save()
         user_data = serializer.data
         user = User.objects.get(email=user_data['email'])
-
         token = RefreshToken.for_user(user).access_token
-
         current_site = get_current_site(request).domain
         relative_link = reverse('email-verify')
         absurl = 'http://' + current_site + relative_link + "?token=" + str(token)
@@ -43,15 +46,13 @@ class RegisterView(generics.GenericAPIView):
         data = {'email_body': email_body, 'to_email': user.email, 'email_subject': 'Verify your email'}
         
         Util.send_email(data)
-
-        return Response(user_data, status=status.HTTP_200_OK)
+        return Response(user_data, status=status.HTTP_201_CREATED)
 
 class VerifyEmail(views.APIView):
 
-    serializer_class = EmailVerificationSerializer
-    
-    token_param_config = openapi.Parameter('token', in_=openapi.IN_QUERY,
-                                           description='Token for email verification', type=openapi.TYPE_STRING)
+    serializer_class = EmailVerificationSerializer    
+    token_param_config = openapi.Parameter(
+        'token', in_=openapi.IN_QUERY, description='Description', type=openapi.TYPE_STRING)
 
     @swagger_auto_schema(manual_parameters=[token_param_config])
     def get(self, request):
@@ -85,7 +86,6 @@ class RequestPasswordResetEmail(generics.GenericAPIView):
     def post(self, request):
 
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
         email = request.data.get('email', '')
 
         if User.objects.filter(email=email).exists():
@@ -97,9 +97,9 @@ class RequestPasswordResetEmail(generics.GenericAPIView):
             relativelink = reverse(
                 'password-reset-confirm', kwargs={'uidb64': uidb64, 'token': token})
             absurl = 'http://' + current_site + relativelink
-            email_body = 'Hello, \n Use the link below to rest your password:\n' + absurl
-            data = {'email_body': email_body, 'to_email': user.email,
-                        'email_subject': 'Reset your email'}
+            email_body = 'Hello, \n Use the link below to rest your password:\n' + absurl + "?redirect_url=" + redirect_url
+            data = {'email_body': email_body, 'to_email': user.email, 
+                    'email_subject': 'Reset your password'}
 
             Util.send_email(data)                
 
@@ -107,20 +107,35 @@ class RequestPasswordResetEmail(generics.GenericAPIView):
 
 class PasswordTokenCheckAPI(generics.GenericAPIView):
 
+    serializer_class = SetNewPasswordSerializer
+
     def get(self, request, uidb64, token):
         
+        redirect_url = request.GET.get('redirect_url')
+
         try:
             id = smart_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(id=id)
 
             if not PasswordResetTokenGenerator().check_token(user, token):
-                return Response({'error': 'Token is not valid, Please request a new once'}, status=status.HTTP_401_UNAUTHORIZED)
-            
-            return Response({'success': True, 'massage': 'Credentials Valid', 'uidb64': uidb64, 'token': token},status=status.HTTP_200_OK)
+                if len(redirect_url) > 3:
+                    return CustomRedirect(redirect_url + '?token_valid=False')
+                else:
+                    return CustomRedirect(os.environ.get('FRONTEND_URL', '')+'?token_valid=False')
+                
+            if redirect_url and len(redirect_url) > 3:
+                return CustomRedirect(redirect_url + '?token_valid = True&massage= Credentials Valid&uid64=' + uidb64 + '&token=' + token)
+
+            else:
+                return CustomRedirect(os.environ.get('FRONTEND_URL', '')+'?token_valid=False')            
 
         except DjangoUnicodeDecodeError as indentifier:
-            if not PasswordResetTokenGenerator().check_token(user):
-                return Response({'error': 'Token is not valid, Please request a new once'}, status=status.HTTP_401_UNAUTHORIZED)
+            try:
+                if not PasswordResetTokenGenerator().check_token(user):
+                    return CustomRedirect(redirect_url + '?token_valid=False')
+                
+            except UnboundLocalError as e:
+                    return Response({'error': 'Token is not valid, Please request a new once'}, status=status.HTTP_400_BAD_REQUEST)
 
 class SetNewPasswordAPIView(generics.GenericAPIView):
     
@@ -130,3 +145,15 @@ class SetNewPasswordAPIView(generics.GenericAPIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response({'success': True, 'massage': 'Password reset success'}, status=status.HTTP_200_OK)
+
+class LogoutAPIView(generics.GenericAPIView):
+    
+    serializer_class = LogoutSerialzer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)

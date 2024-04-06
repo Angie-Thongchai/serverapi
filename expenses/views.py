@@ -5,7 +5,6 @@ from .models import Expense
 from rest_framework import permissions
 from .permissions import IsOwner
 
-# Create your views here.
 class ExpenseListAPIView(ListCreateAPIView):
 
     serializer_class = ExpensesSerializer
@@ -21,8 +20,8 @@ class ExpenseListAPIView(ListCreateAPIView):
 class ExpenseDetailAPIView(RetrieveUpdateDestroyAPIView):
 
     serializer_class = ExpensesSerializer
-    queryset = Expense.objects.all()
     permission_classes = (permissions.IsAuthenticated, IsOwner)
+    queryset = Expense.objects.all()
     lookup_field = 'id'
 
     
