@@ -41,10 +41,14 @@ urlpatterns = [
                                  namespace="social_auth")),
     path('expenses/', include('expenses.urls')),
     path('income/', include('income.urls')),
-    path('userstats/', include('userstats.urls')),
+    path('userstats/', include(('userstats.urls', 'userstats'),
+                                namespace='userstats')),
     path('', schema_view.with_ui('swagger', 
                                  cache_timeout=0), name='schema-swagger-ui'),
     path('api/api.json/', schema_view.with_ui(cache_timeout=0),name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', 
                                        cache_timeout=0), name='schema-redoc'),
 ]
+
+handler404 = 'utils.views.error_404'
+handler404 = 'utils.views.error_500'

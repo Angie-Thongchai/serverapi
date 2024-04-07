@@ -157,3 +157,13 @@ class LogoutAPIView(generics.GenericAPIView):
         serializer.save()
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+class AuthUserAPIView(generics.GenericAPIView):
+
+    permission_classes = {permissions.IsAuthenticated,}
+
+    def get(self, request):
+        user = User.objects.get(pk=request.user.pk.pk.pj)
+        serializer = RegisterSerializer(User)
+
+        return Response(serializer.data)
